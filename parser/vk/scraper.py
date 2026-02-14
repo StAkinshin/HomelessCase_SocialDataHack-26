@@ -1,224 +1,157 @@
 import os
 import time
 import re
+import json
 import vk_api
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
+# --- НАСТРОЙКИ ---
 load_dotenv()
 VK_TOKEN = os.getenv("VK_TOKEN")
+INPUT_FILENAME = "input_vk.json"
 
-if not VK_TOKEN:
-    print("❌ Токен не найден в .env")
-    exit()
+# Лимиты
+GROUPS_LIMIT_PER_QUERY = 20   # Групп на 1 запрос
+POSTS_PER_GROUP = 30          # Постов со стены
+DAYS_TO_CHECK = 365           # Глубина (1 год)
 
-# --- КОНФИГУРАЦИЯ НА ОСНОВЕ ТВОЕГО ПРОМТА ---
-
-# 1. ЗАПРОСЫ ДЛЯ ПОИСКА ГРУПП (Используем "Прямую терминологию" из промта)
-# Это запросы, по которым мы ищем САМИ СООБЩЕСТВА
-GROUP_SEARCH_QUERIES = [
-    'Рабочий дом', 
-    'Рабочий дом работа',
-    'Трудовой приют',
-    'Дом трудолюбия',
-    'Центр социальной адаптации',
-    'Работа с проживанием и питанием',
-    'Помощь бездомным',
-    'Приют для рабочих'
-]
-
-# 2. ФИЛЬТР НАЗВАНИЙ ГРУПП (Черный список)
-# Отсекаем зоозащиту на этапе поиска групп
-BANNED_GROUP_WORDS = [
-    'животн', 'хвост', 'лап', 'кот', 'пес', 'собак', 'звер', 
-    'питом', 'щен', 'потеряш', 'зоо', 'help_dog'
-]
-
-# 3. ФИЛЬТР ТЕКСТА ПОСТА (Черный список)
-# Отсекаем мусор внутри постов (животные + белая работа)
-STOP_WORDS_IN_POST = [
-    # Животные (из промта)
-    'кошка', 'собака', 'щенок', 'котенок', 'стерилизация', 'прививки', 
-    'передержка', 'порода', 'ветклиника', 'корм', 'куратор', 'ласковая',
-    # "Белая" работа и офисы
-    'резюме', 'высшее образование', 'знание пк', 'инженер', 'дизайнер', 
-    'менеджер', 'официальное трудоустройство', 'тк рф', 'удаленная работа',
-    'салон красоты', 'бариста'
-]
-
-# 4. ОБЯЗАТЕЛЬНЫЕ МАРКЕРЫ (Белый список)
-# Пост считается целевым, если в нем есть слова из категории "Условия" или "Аудитория"
-REQUIRED_CONTEXT_WORDS = [
-    # Условия (из промта)
-    'питание', 'проживание', 'койко', 'ежедневн', 'выплат', 'восстановление', 
-    'документ', 'билет', 'вахта', 'жильё', 
-    # Аудитория
-    'зависим', 'алко', 'нарко', 'адаптац', 'трудн', 'ситуац', 'бездомн'
-]
-
-# Настройки парсера
-GROUPS_LIMIT_PER_QUERY = 30   # Сколько групп проверять на каждый запрос
-POSTS_PER_GROUP = 50          # Глубина проверки стены
-DAYS_TO_CHECK = 365           # Брать посты не старше N дней (рекомендация: 6-12 мес)
-
-def get_phone(text):
+def extract_phone(text):
     if not text: return None
-    # Универсальный regex для телефонов РФ
     pattern = r'(?:\+7|8|7)[\s\-]?\(?(\d{3})\)?[\s\-]?(\d{3})[\s\-]?(\d{2})[\s\-]?(\d{2})'
     match = re.search(pattern, text)
-    if match:
-        return match.group(0)
+    if match: return match.group(0)
     return None
 
-def is_group_name_clean(name):
-    """Проверяет название группы на стоп-слова (зоозащита)"""
-    name_lower = name.lower()
-    for bad_word in BANNED_GROUP_WORDS:
-        if bad_word in name_lower:
-            return False
-    return True
-
-def is_post_relevant(text):
-    """
-    Комплексная проверка текста поста по методичке.
-    1. Не содержит стоп-слов.
-    2. Содержит маркеры рабочего дома.
-    """
-    text_lower = text.lower()
-    
-    # 1. Проверка на СТОП-СЛОВА
-    for bad_word in STOP_WORDS_IN_POST:
-        if bad_word in text_lower:
-            return False 
-
-    # 2. Проверка на ОБЯЗАТЕЛЬНЫЕ СЛОВА
-    has_required = False
-    for good_word in REQUIRED_CONTEXT_WORDS:
-        if good_word in text_lower:
-            has_required = True
-            break
-    
-    if not has_required:
-        return False
-
-    return True
-
 def main():
-    print("🚀 Запуск парсера (версия по методичке)...")
+    print("🚀 Запуск скрапера (с авторами и названиями групп)...")
     
+    if not VK_TOKEN:
+        print("❌ Ошибка: Токен не найден в .env")
+        return
+
+    # 1. Читаем JSON
+    if not os.path.exists(INPUT_FILENAME):
+        print(f"❌ Файл {INPUT_FILENAME} не найден!")
+        return
+
+    with open(INPUT_FILENAME, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    queries = [item['query'] for item in data['queries']]
+    print(f"📂 Загружено {len(queries)} запросов.")
+
     try:
         vk_session = vk_api.VkApi(token=VK_TOKEN)
         vk = vk_session.get_api()
     except Exception as e:
-        print(f"❌ Ошибка входа: {e}")
+        print(f"❌ Ошибка авторизации ВК: {e}")
         return
 
-    # --- ШАГ 1: Поиск и фильтрация групп ---
-    target_groups = []
-    seen_group_ids = set()
-    
-    print("🔎 Ищем целевые сообщества...")
-    
-    for query in GROUP_SEARCH_QUERIES:
-        try:
-            # Ищем сообщества
-            groups = vk.groups.search(q=query, count=GROUPS_LIMIT_PER_QUERY, sort=0)['items']
-            
-            for g in groups:
-                # Пропускаем закрытые и дубликаты
-                if g['is_closed'] == 1 or g['id'] in seen_group_ids:
-                    continue
-
-                # ФИЛЬТР ПО НАЗВАНИЮ (Убираем "Хвостиков")
-                if not is_group_name_clean(g['name']):
-                    continue
-
-                seen_group_ids.add(g['id'])
-                target_groups.append({
-                    'id': g['id'],
-                    'name': g['name'],
-                    'screen_name': g['screen_name']
-                })
-                
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"Ошибка поиска групп '{query}': {e}")
-
-    print(f"🎯 Отобрано {len(target_groups)} профильных групп для сканирования.")
-
-    # --- ШАГ 2: Парсинг стен ---
     all_posts = []
-    min_date = datetime.now() - timedelta(days=DAYS_TO_CHECK)
+    seen_post_links = set() 
     
-    print(f"📥 Сканируем стены (глубина {POSTS_PER_GROUP} постов, не старше {min_date.date()})...")
-    
-    for idx, group in enumerate(target_groups):
-        print(f"[{idx+1}/{len(target_groups)}] {group['name']}...", end='\r')
+    # --- ГЛАВНЫЙ ЦИКЛ ---
+    for q_idx, query in enumerate(queries):
+        print(f"\n🔎 [{q_idx+1}/{len(queries)}] Запрос: '{query}'")
         
         try:
-            posts = vk.wall.get(owner_id=f"-{group['id']}", count=POSTS_PER_GROUP)['items']
+            # 1. Ищем группы
+            clean_query = query.replace('#', '').strip()
+            groups = vk.groups.search(q=clean_query, count=GROUPS_LIMIT_PER_QUERY, sort=0)['items']
             
-            for post in posts:
-                # Проверка даты
-                post_date = datetime.fromtimestamp(post['date'])
-                if post_date < min_date:
-                    continue
+            if not groups:
+                print("   Групп не найдено.")
+                continue
 
-                # --- ИЗВЛЕЧЕНИЕ ТЕКСТА (включая репосты) ---
-                text = post.get('text', '')
-                is_repost = False
+            # 2. Проходим по каждой группе
+            for g in groups:
+                if g['is_closed'] == 1: continue 
                 
-                # Если это репост, берем текст оригинала
-                if 'copy_history' in post and len(post['copy_history']) > 0:
-                    repost_text = post['copy_history'][0].get('text', '')
-                    text = f"{text}\n--- REPOST ---\n{repost_text}"
-                    is_repost = True
+                group_id = g['id']
+                group_name = g['name'] # <-- ВОТ НАЗВАНИЕ ГРУППЫ
                 
-                if not text: continue
-                
-                # --- ГЛАВНЫЕ ФИЛЬТРЫ ---
-                # 1. Проверяем содержание (Убираем мусор, ищем ключевики)
-                if not is_post_relevant(text):
-                    continue
+                try:
+                    # Скачиваем стену
+                    posts = vk.wall.get(owner_id=f"-{group_id}", count=POSTS_PER_GROUP)['items']
+                    
+                    for post in posts:
+                        # Фильтр по дате
+                        post_date = datetime.fromtimestamp(post['date'])
+                        if post_date < datetime.now() - timedelta(days=DAYS_TO_CHECK):
+                            continue
 
-                # 2. Ищем телефон (как и раньше, это важно для базы)
-                phone = get_phone(text)
-                
-                # Если нет телефона И текст короткий/пустой -> пропускаем
-                # (Если текст длинный и содержательный, но без телефона - может быть просто реклама адреса, берем)
-                if not phone and len(text) < 50:
-                    continue
+                        # Текст + Репост
+                        text = post.get('text', '')
+                        if 'copy_history' in post and len(post['copy_history']) > 0:
+                            text += "\n--- REPOST ---\n" + post['copy_history'][0].get('text', '')
+                        
+                        if not text.strip(): continue
 
-                all_posts.append({
-                    'group_name': group['name'],
-                    'date': post_date.strftime('%Y-%m-%d'),
-                    'phone': phone,
-                    'is_repost': 1 if is_repost else 0,
-                    'city': '?', 
-                    'link': f"https://vk.com/wall-{group['id']}_{post['id']}",
-                    'text_preview': text[:500].replace('\n', ' ') # Обрезаем для Excel
-                })
+                        post_link = f"https://vk.com/wall-{group_id}_{post['id']}"
+                        
+                        if post_link in seen_post_links: continue
+                        seen_post_links.add(post_link)
+
+                        # --- ЛОГИКА ОПРЕДЕЛЕНИЯ АВТОРА ---
+                        from_id = post.get('from_id')
+                        author_link = ""
+                        author_type = ""
+                        
+                        if from_id:
+                            if from_id < 0:
+                                # Отрицательный ID = писала группа
+                                author_type = "Группа"
+                                author_link = f"https://vk.com/public{abs(from_id)}"
+                            else:
+                                # Положительный ID = писал человек
+                                author_type = "Человек"
+                                author_link = f"https://vk.com/id{from_id}"
+                        
+                        # Иногда есть подпись "signer_id" (кто именно из админов запостил)
+                        signer_id = post.get('signer_id')
+                        signer_link = ""
+                        if signer_id:
+                            signer_link = f"https://vk.com/id{signer_id}"
+
+                        # СОХРАНЯЕМ
+                        all_posts.append({
+                            'search_query': query,         # По какому запросу нашли
+                            'group_name': group_name,      # Название группы
+                            'author_type': author_type,    # Кто автор (Группа/Человек)
+                            'author_link': author_link,    # Ссылка на автора
+                            'signer_link': signer_link,    # Ссылка на автора (если пост от имени группы с подписью)
+                            'date': post_date.strftime('%Y-%m-%d'),
+                            'phone': extract_phone(text),
+                            'link': post_link,
+                            'text': text[:5000]
+                        })
+                    
+                    time.sleep(0.2) 
+
+                except Exception:
+                    pass
             
-            time.sleep(0.3) 
-
         except Exception as e:
-            # print(f"Ошибка доступа к стене {group['id']}") 
-            pass
+            print(f"Ошибка: {e}")
 
-    # --- ШАГ 3: Сохранение ---
-    print("\n") 
+    # --- СОХРАНЕНИЕ ---
+    print("\n")
     if all_posts:
         df = pd.DataFrame(all_posts)
-        # Удаляем полные дубликаты по тексту
-        df = df.drop_duplicates(subset=['text_preview'])
+        filename = f"vk_data_with_authors_{datetime.now().strftime('%m%d_%H%M')}.xlsx"
+        # Сортируем колонки для удобства
+        cols = ['date', 'city', 'phone', 'group_name', 'author_type', 'author_link', 'signer_link', 'link', 'text', 'search_query']
+        # Оставляем только те колонки, которые есть в датафрейме (на случай ошибок)
+        final_cols = [c for c in cols if c in df.columns]
+        df = df[final_cols]
         
-        filename = f"working_houses_filtered_{datetime.now().strftime('%d_%H%M')}.xlsx"
         df.to_excel(filename, index=False)
-        print(f"✅ УСПЕХ! Собрано {len(df)} релевантных объявлений.")
-        print(f"Файл: {filename}")
+        print(f"✅ Готово! Собрано {len(df)} записей.")
+        print(f"💾 Файл: {filename}")
     else:
-        print("😔 Ничего не найдено. Попробуй увеличить DAYS_TO_CHECK или список групп.")
+        print("😔 Ничего не найдено.")
 
 if __name__ == "__main__":
     main()

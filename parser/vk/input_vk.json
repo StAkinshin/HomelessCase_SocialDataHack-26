@@ -1,0 +1,279 @@
+{
+  "queries": [
+    {
+      "query": "рабочий дом",
+      "type": "direct",
+      "expected_precision": "high",
+      "expected_recall": "high",
+      "priority": 1,
+      "description": "Базовый прямой запрос, основной термин",
+      "hashtag": false
+    },
+    {
+      "query": "трудовой приют",
+      "type": "direct",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 1,
+      "description": "Распространенный синоним, часто используется религиозными РД",
+      "hashtag": false
+    },
+    {
+      "query": "дом трудолюбия",
+      "type": "direct",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Устаревший, но используемый термин",
+      "hashtag": false
+    },
+    {
+      "query": "#рабочийдом",
+      "type": "hashtag",
+      "expected_precision": "high",
+      "expected_recall": "high",
+      "priority": 1,
+      "description": "Главный хэштег отрасли в ВК",
+      "hashtag": true
+    },
+    {
+      "query": "#трудовойприют",
+      "type": "hashtag",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Хэштег для приютов",
+      "hashtag": true
+    },
+    {
+      "query": "#работасжильем",
+      "type": "hashtag",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 1,
+      "description": "Популярный хэштег для вахт и РД",
+      "hashtag": true
+    },
+    {
+      "query": "#помощьлюдям",
+      "type": "hashtag",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 2,
+      "description": "Хэштег часто используется благотворительными РД",
+      "hashtag": true
+    },
+    {
+      "query": "#работаспроживанием",
+      "type": "hashtag",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 2,
+      "description": "Широкий хэштег",
+      "hashtag": true
+    },
+    {
+      "query": "#бездомные",
+      "type": "hashtag",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Хэштег целевой аудитории",
+      "hashtag": true
+    },
+    {
+      "query": "#социальнаяадаптация",
+      "type": "hashtag",
+      "expected_precision": "high",
+      "expected_recall": "low",
+      "priority": 3,
+      "description": "Специфический термин для маскировки РД",
+      "hashtag": true
+    },
+    {
+      "query": "помощь людям в трудной жизненной ситуации",
+      "type": "target_audience",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 1,
+      "description": "Ключевая фраза-маркер в описаниях",
+      "hashtag": false
+    },
+    {
+      "query": "работа для бездомных",
+      "type": "target_audience",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 1,
+      "description": "Прямое обращение к ЦА",
+      "hashtag": false
+    },
+    {
+      "query": "бездомные работа",
+      "type": "target_audience",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 2,
+      "description": "Вариация запроса по ЦА",
+      "hashtag": false
+    },
+    {
+      "query": "работа без документов",
+      "type": "target_audience",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 2,
+      "description": "Поиск по болевой точке ЦА",
+      "hashtag": false
+    },
+    {
+      "query": "освободившиеся работа",
+      "type": "target_audience",
+      "expected_precision": "high",
+      "expected_recall": "low",
+      "priority": 2,
+      "description": "Для тех, кто вышел из мест лишения свободы",
+      "hashtag": false
+    },
+    {
+      "query": "центр социальной адаптации",
+      "type": "target_audience",
+      "expected_precision": "medium",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Эвфемизм для рабочего дома",
+      "hashtag": false
+    },
+    {
+      "query": "обманутые на вахте помощь",
+      "type": "target_audience",
+      "expected_precision": "high",
+      "expected_recall": "low",
+      "priority": 3,
+      "description": "Узкий сегмент ЦА",
+      "hashtag": false
+    },
+    {
+      "query": "разнорабочие проживание питание",
+      "type": "combined",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 1,
+      "description": "Самый частотный комбинированный запрос",
+      "hashtag": false
+    },
+    {
+      "query": "подсобники бесплатное проживание",
+      "type": "combined",
+      "expected_precision": "medium",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Специфика низкоквалифицированного труда",
+      "hashtag": false
+    },
+    {
+      "query": "восстановление документов работа жилье",
+      "type": "combined",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 1,
+      "description": "Комбинация услуги и работы",
+      "hashtag": false
+    },
+    {
+      "query": "трудная ситуация работа проживание",
+      "type": "combined",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Смесь ЦА и условий",
+      "hashtag": false
+    },
+    {
+      "query": "грузчики проживание питание",
+      "type": "combined",
+      "expected_precision": "low",
+      "expected_recall": "high",
+      "priority": 3,
+      "description": "Может пересекаться с вахтой, требует фильтрации",
+      "hashtag": false
+    },
+    {
+      "query": "неквалифицированная работа жилье",
+      "type": "combined",
+      "expected_precision": "medium",
+      "expected_recall": "medium",
+      "priority": 3,
+      "description": "Общий запрос",
+      "hashtag": false
+    },
+    {
+      "query": "работа жилье питание бесплатно",
+      "type": "compensation",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 2,
+      "description": "Акцент на бесплатности условий",
+      "hashtag": false
+    },
+    {
+      "query": "койко-место работа",
+      "type": "compensation",
+      "expected_precision": "high",
+      "expected_recall": "low",
+      "priority": 3,
+      "description": "Специфичный маркер 'койко-место'",
+      "hashtag": false
+    },
+    {
+      "query": "нужна работа с жильем",
+      "type": "informal",
+      "expected_precision": "low",
+      "expected_recall": "high",
+      "priority": 3,
+      "description": "Разговорный стиль",
+      "hashtag": false
+    },
+    {
+      "query": "ищу работу с проживанием",
+      "type": "informal",
+      "expected_precision": "low",
+      "expected_recall": "high",
+      "priority": 3,
+      "description": "Поиск объявлений от людей (и ответов РД в комментах)",
+      "hashtag": false
+    },
+    {
+      "query": "требуются разнорабочие проживание",
+      "type": "informal",
+      "expected_precision": "medium",
+      "expected_recall": "high",
+      "priority": 3,
+      "description": "Стандартное начало поста",
+      "hashtag": false
+    },
+    {
+      "query": "помогу с жильем и работой",
+      "type": "informal",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Частая формулировка вербовщиков",
+      "hashtag": false
+    },
+    {
+      "query": "берем всех работа жилье",
+      "type": "informal",
+      "expected_precision": "high",
+      "expected_recall": "medium",
+      "priority": 2,
+      "description": "Агрессивный маркетинг РД",
+      "hashtag": false
+    }
+  ],
+  "total_queries": 30,
+  "estimated_coverage": "85-95%",
+  "geographic_scope": "Вся Россия",
+  "platform": "ВКонтакте",
+  "notes": "Набор сбалансирован: 7 хэштегов, 5 прямых, 7 ЦА, 6 комбинированных, 5 неформальных."
+}
