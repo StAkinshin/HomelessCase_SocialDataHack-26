@@ -1,7 +1,7 @@
 # Workhouses study in the Russian Federation
 
 Developed during **Social Data Hackathon 2026**  
-Teams: **PopulGnomes**&**No name**
+Teams: **PopulGnomes** & **No name**
 
 ## Teams
 
