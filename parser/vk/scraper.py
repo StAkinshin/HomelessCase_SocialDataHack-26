@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# --- НАСТРОЙКИ ---
+# настройки
 load_dotenv()
 VK_TOKEN = os.getenv("VK_TOKEN")
 INPUT_FILENAME = "input_vk.json"
@@ -32,7 +32,7 @@ def main():
         return
 
     if not os.path.exists(INPUT_FILENAME):
-        print(f"Файл {INPUT_FILENAME} не найден!")
+        print(f"Файл {INPUT_FILENAME} не найден")
         return
 
     with open(INPUT_FILENAME, 'r', encoding='utf-8') as f:
