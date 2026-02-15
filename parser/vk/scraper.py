@@ -13,9 +13,9 @@ VK_TOKEN = os.getenv("VK_TOKEN")
 INPUT_FILENAME = "input_vk.json"
 
 # Лимиты
-GROUPS_LIMIT_PER_QUERY = 20   # Групп на 1 запрос
-POSTS_PER_GROUP = 30          # Постов со стены
-DAYS_TO_CHECK = 365           # Глубина (1 год)
+# ВК отдает максимум 1000 записей на один запрос.
+MAX_POSTS_PER_QUERY = 200    # Сколько постов собирать на КАЖДЫЙ запрос из JSON (ставь 1000 для максимума)
+DAYS_TO_CHECK = 365          # Не старше года
 
 def extract_phone(text):
     if not text: return None
@@ -25,133 +25,123 @@ def extract_phone(text):
     return None
 
 def main():
-    print("🚀 Запуск скрапера (с авторами и названиями групп)...")
+    print("Запуск поиска ...")
     
     if not VK_TOKEN:
-        print("❌ Ошибка: Токен не найден в .env")
+        print("Ошибка: Токен не найден в .env")
         return
 
-    # 1. Читаем JSON
     if not os.path.exists(INPUT_FILENAME):
-        print(f"❌ Файл {INPUT_FILENAME} не найден!")
+        print(f"Файл {INPUT_FILENAME} не найден!")
         return
 
     with open(INPUT_FILENAME, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     queries = [item['query'] for item in data['queries']]
-    print(f"📂 Загружено {len(queries)} запросов.")
+    print(f"Загружено {len(queries)} запросов.")
 
     try:
         vk_session = vk_api.VkApi(token=VK_TOKEN)
         vk = vk_session.get_api()
     except Exception as e:
-        print(f"❌ Ошибка авторизации ВК: {e}")
+        print(f"Ошибка авторизации ВК: {e}")
         return
 
     all_posts = []
-    seen_post_links = set() 
+    seen_post_links = set() # Общий кэш ссылок, чтобы не дублировать
     
-    # --- ГЛАВНЫЙ ЦИКЛ ---
+    # --- ГЛАВНЫЙ ЦИКЛ ПО ЗАПРОСАМ ---
     for q_idx, query in enumerate(queries):
-        print(f"\n🔎 [{q_idx+1}/{len(queries)}] Запрос: '{query}'")
+        print(f"\n🔎 [{q_idx+1}/{len(queries)}] Глобальный поиск: '{query}'")
         
-        try:
-            # 1. Ищем группы
-            clean_query = query.replace('#', '').strip()
-            groups = vk.groups.search(q=clean_query, count=GROUPS_LIMIT_PER_QUERY, sort=0)['items']
-            
-            if not groups:
-                print("   Групп не найдено.")
-                continue
+        posts_collected_for_query = 0
+        next_from = None # Маркер для пагинации (листания страниц поиска)
 
-            # 2. Проходим по каждой группе
-            for g in groups:
-                if g['is_closed'] == 1: continue 
+        # Цикл пагинации (пока не наберем MAX_POSTS_PER_QUERY или пока ВК не скажет хватит)
+        while posts_collected_for_query < MAX_POSTS_PER_QUERY:
+            try:
+                # newsfeed.search ищет везде
+                response = vk.newsfeed.search(
+                    q=query, 
+                    count=200, # Максимум за 1 раз
+                    extended=1, # Чтобы получить инфу об авторах сразу
+                    start_from=next_from
+                )
                 
-                group_id = g['id']
-                group_name = g['name'] # <-- ВОТ НАЗВАНИЕ ГРУППЫ
+                items = response.get('items', [])
+                if not items:
+                    break # Больше ничего нет по этому запросу
+
+                for post in items:
+                    # Фильтр по дате
+                    post_date = datetime.fromtimestamp(post['date'])
+                    if post_date < datetime.now() - timedelta(days=DAYS_TO_CHECK):
+                        continue
+
+                    # Достаем текст + текст репоста
+                    text = post.get('text', '')
+                    if 'copy_history' in post and len(post['copy_history']) > 0:
+                        text += "\n--- REPOST ---\n" + post['copy_history'][0].get('text', '')
+                    
+                    if not text.strip(): continue
+
+                    # Формируем ссылку и проверяем дубликаты
+                    owner_id = post['owner_id']
+                    post_id = post['id']
+                    post_link = f"https://vk.com/wall{owner_id}_{post_id}"
+                    
+                    if post_link in seen_post_links:
+                        continue
+                    seen_post_links.add(post_link)
+
+                    # Определени автора
+                    # owner_id < 0 -> Группа
+                    # owner_id > 0 -> Человек
+                    author_type = "Человек" if owner_id > 0 else "Группа"
+                    author_link = f"https://vk.com/id{owner_id}" if owner_id > 0 else f"https://vk.com/public{abs(owner_id)}"
+                    
+                    # Пытаемся достать красивое имя (из extended=1)
+                    author_name = "?"
+                    # (Тут можно было бы искать в response['profiles'] и ['groups'], но для простоты оставим "?",
+                    # так как ссылка важнее. Ссылки достаточно, чтобы понять кто это)
+
+                    all_posts.append({
+                        'search_query': query,
+                        'date': post_date.strftime('%Y-%m-%d'),
+                        'author_type': author_type,
+                        'author_link': author_link,
+                        'phone': extract_phone(text),
+                        'city': '?', 
+                        'link': post_link,
+                        'text': text[:5000]
+                    })
+                    
+                    posts_collected_for_query += 1
                 
-                try:
-                    # Скачиваем стену
-                    posts = vk.wall.get(owner_id=f"-{group_id}", count=POSTS_PER_GROUP)['items']
-                    
-                    for post in posts:
-                        # Фильтр по дате
-                        post_date = datetime.fromtimestamp(post['date'])
-                        if post_date < datetime.now() - timedelta(days=DAYS_TO_CHECK):
-                            continue
+                # Получаем код для следующей страницы
+                next_from = response.get('next_from')
+                if not next_from:
+                    break # Страницы кончились
+                
+                time.sleep(1) # Пауза между страницами поиска
 
-                        # Текст + Репост
-                        text = post.get('text', '')
-                        if 'copy_history' in post and len(post['copy_history']) > 0:
-                            text += "\n--- REPOST ---\n" + post['copy_history'][0].get('text', '')
-                        
-                        if not text.strip(): continue
+            except Exception as e:
+                print(f"Ошибка при запросе: {e}")
+                break
 
-                        post_link = f"https://vk.com/wall-{group_id}_{post['id']}"
-                        
-                        if post_link in seen_post_links: continue
-                        seen_post_links.add(post_link)
+        print(f"   Собрано: {posts_collected_for_query} постов")
 
-                        # --- ЛОГИКА ОПРЕДЕЛЕНИЯ АВТОРА ---
-                        from_id = post.get('from_id')
-                        author_link = ""
-                        author_type = ""
-                        
-                        if from_id:
-                            if from_id < 0:
-                                # Отрицательный ID = писала группа
-                                author_type = "Группа"
-                                author_link = f"https://vk.com/public{abs(from_id)}"
-                            else:
-                                # Положительный ID = писал человек
-                                author_type = "Человек"
-                                author_link = f"https://vk.com/id{from_id}"
-                        
-                        # Иногда есть подпись "signer_id" (кто именно из админов запостил)
-                        signer_id = post.get('signer_id')
-                        signer_link = ""
-                        if signer_id:
-                            signer_link = f"https://vk.com/id{signer_id}"
-
-                        # СОХРАНЯЕМ
-                        all_posts.append({
-                            'search_query': query,         # По какому запросу нашли
-                            'group_name': group_name,      # Название группы
-                            'author_type': author_type,    # Кто автор (Группа/Человек)
-                            'author_link': author_link,    # Ссылка на автора
-                            'signer_link': signer_link,    # Ссылка на автора (если пост от имени группы с подписью)
-                            'date': post_date.strftime('%Y-%m-%d'),
-                            'phone': extract_phone(text),
-                            'link': post_link,
-                            'text': text[:5000]
-                        })
-                    
-                    time.sleep(0.2) 
-
-                except Exception:
-                    pass
-            
-        except Exception as e:
-            print(f"Ошибка: {e}")
-
-    # --- СОХРАНЕНИЕ ---
+    # Сохранение
     print("\n")
     if all_posts:
         df = pd.DataFrame(all_posts)
-        filename = f"vk_data_with_authors_{datetime.now().strftime('%m%d_%H%M')}.xlsx"
-        # Сортируем колонки для удобства
-        cols = ['date', 'city', 'phone', 'group_name', 'author_type', 'author_link', 'signer_link', 'link', 'text', 'search_query']
-        # Оставляем только те колонки, которые есть в датафрейме (на случай ошибок)
-        final_cols = [c for c in cols if c in df.columns]
-        df = df[final_cols]
-        
+        filename = f"global_search_{datetime.now().strftime('%m%d_%H%M')}.xlsx"
         df.to_excel(filename, index=False)
-        print(f"✅ Готово! Собрано {len(df)} записей.")
-        print(f"💾 Файл: {filename}")
+        print(f"Найдено {len(df)} записей по всему ВК.")
+        print(f"Файл: {filename}")
     else:
-        print("😔 Ничего не найдено.")
+        print("Ничего не найдено.")
 
 if __name__ == "__main__":
     main()
